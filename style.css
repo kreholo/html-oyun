@@ -1,0 +1,16 @@
+body {
+    background-color: #333;
+    color: #eee;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+}
+
+canvas {
+    background-color: #87CEEB; /* Gökyüzü mavisi */
+    border: 2px solid #000;
+}
