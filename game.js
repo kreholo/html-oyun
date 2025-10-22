@@ -34,9 +34,9 @@ let baseSpeed = 4.5;
 let speedIncreaseRate = 0.07;
 let enemyTimer = 0;
 
-let spikeSpawnRate = 90;
-let topDownSpawnRate = 150;
-let leftRightSpawnRate = 240;
+let spikeSpawnRate = 40;
+let topDownSpawnRate = 70;
+let leftRightSpawnRate = 90;
 
 let cloudTimer = 0;
 let birdTimer = 0;
@@ -190,7 +190,7 @@ function update() {
             player.y = platform.y - player.height;
             player.velocityY = 0;
             // DEĞİŞTİ: Zıplama hakkı 3'e yenilenir
-            if (player.jumpsLeft < 3) player.jumpsLeft = 3;
+            if (player.jumpsLeft < 4) player.jumpsLeft = 4;
             player.isJumping = false;
         }
     });
@@ -266,7 +266,7 @@ function draw() {
     coins.forEach(coin => {
         ctx.fillStyle = coin.color;
         ctx.beginPath();
-        ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 2, coin.width / 2, 0, Math.PI * 2);
+        ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 4, coin.width / 2, 0, Math.PI * 2);
         ctx.fill();
     });
     
