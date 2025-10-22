@@ -8,73 +8,57 @@ const player = {
     y: 500,
     width: 30,
     height: 30,
-    color: '#2ecc71', // Karakter yeşil
+    color: '#2ecc71',
     speed: 5,
     velocityY: 0,
     isJumping: false,
     gravity: 0.6,
-    jumpsLeft: 2 // Çift zıplama hakkı
+    jumpsLeft: 2
 };
 
 const platforms = [
     { x: 0, y: 550, width: 800, height: 50, color: '#333' },
 ];
 
+// YENİ: Oyun nesneleri için diziler
 let enemies = [];
-// YENİ: Arka plan öğeleri için diziler
 let clouds = [];
 let birds = [];
+let coins = [];
 
+// YENİ: Skor ve Zaman
+let score = 0;
 let startTime = performance.now();
 let elapsedTime = 0;
 let gameOver = false;
 
+// Oyun Ayarları
 let baseSpeed = 4;
 let speedIncreaseRate = 0.05;
 let enemyTimer = 0;
 
+// DEĞİŞTİ: Düşman gelme süreleri güncellendi
 let spikeSpawnRate = 120;
+let topDownSpawnRate = 150; // Yukarıdan gelenler için
 let leftRightSpawnRate = 240;
 
-// YENİ: Arka plan öğeleri için zamanlayıcılar
+// YENİ: Arka plan ve coin zamanlayıcıları
 let cloudTimer = 0;
 let birdTimer = 0;
-let cloudSpawnRate = 300; // Her 5 saniyede bir bulut
-let birdSpawnRate = 450;  // Her 7.5 saniyede bir kuş
+let coinTimer = 0;
+let cloudSpawnRate = 300;
+let birdSpawnRate = 450;
+let coinSpawnRate = 200; // Coinlerin gelme sıklığı
 
 let rightPressed = false;
 let leftPressed = false;
 
-// YENİ: Oyuncunun ulaşabileceği maksimum zıplama yüksekliğini hesaplama
-// Bu, düşman konumlandırmasında kullanılacak.
-function getPlayerMaxJumpHeight() {
-    // Kaba bir tahmin: Bir zıplamada ne kadar yükselirsin?
-    // Max velocityY * (max velocityY / gravity) / 2
-    // İlk zıplama: -12, ikincisi -10
-    let maxInitialVel = 12; // İlk zıplama gücü
-    let maxDoubleJumpVel = 10; // İkinci zıplama gücü
-
-    // Yaklaşık olarak maksimum yükseklik
-    let height1 = (maxInitialVel * maxInitialVel) / (2 * player.gravity);
-    let height2 = (maxDoubleJumpVel * maxDoubleJumpVel) / (2 * player.gravity);
-
-    return height1 + height2 + player.height; // Karakterin kendi yüksekliğini de ekle
-}
-const playerMaxReach = getPlayerMaxJumpHeight();
-
-
 // --- Olay Dinleyicileri ---
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Right' || e.key === 'ArrowRight') {
-        rightPressed = true;
-    } else if (e.key === 'Left' || e.key === 'ArrowLeft') {
-        leftPressed = true;
-    } else if ((e.key === ' ' || e.key === 'ArrowUp') && player.jumpsLeft > 0 && !gameOver) {
-        if (!player.isJumping) {
-            player.velocityY = -12;
-        } else {
-            player.velocityY = -10;
-        }
+    if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
+    else if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+    else if ((e.key === ' ' || e.key === 'ArrowUp') && player.jumpsLeft > 0 && !gameOver) {
+        player.velocityY = (player.isJumping) ? -10 : -12;
         player.isJumping = true;
         player.jumpsLeft--;
     } else if ((e.key === 'r' || e.key === 'R') && gameOver) {
@@ -83,15 +67,10 @@ document.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keyup', (e) => {
-    if (e.key === 'Right' || e.key === 'ArrowRight') {
-        rightPressed = false;
-    } else if (e.key === 'Left' || e.key === 'ArrowLeft') {
-        leftPressed = false;
-    }
-    if (e.key === ' ' || e.key === 'ArrowUp') {
-        if (player.velocityY < 0) {
-            player.velocityY *= 0.4;
-        }
+    if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
+    else if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+    if ((e.key === ' ' || e.key === 'ArrowUp') && player.velocityY < 0) {
+        player.velocityY *= 0.4;
     }
 });
 
@@ -102,98 +81,81 @@ function resetGame() {
     player.velocityY = 0;
     player.isJumping = false;
     player.jumpsLeft = 2;
+    
+    // Tüm dizileri ve sayaçları sıfırla
     enemies = [];
-    clouds = []; // YENİ: Bulutları sıfırla
-    birds = [];  // YENİ: Kuşları sıfırla
+    clouds = [];
+    birds = [];
+    coins = [];
+    score = 0;
+    
     startTime = performance.now();
     elapsedTime = 0;
-    spikeSpawnRate = 120;
-    leftRightSpawnRate = 240;
-    enemyTimer = 0;
-    cloudTimer = 0; // YENİ: Bulut zamanlayıcısını sıfırla
-    birdTimer = 0;  // YENİ: Kuş zamanlayıcısını sıfırla
+    enemyTimer = cloudTimer = birdTimer = coinTimer = 0;
+    
     gameOver = false;
     gameLoop();
 }
 
-// YENİ: Bulut oluşturma fonksiyonu
+// YENİ: Arka plan ve Coin oluşturma fonksiyonları
 function spawnCloud() {
-    const cloud = {
+    clouds.push({
         x: canvas.width,
-        y: Math.random() * (canvas.height / 3), // Üst üçte birlik alanda
-        width: Math.random() * 100 + 80, // 80-180 arası genişlik
-        height: Math.random() * 40 + 30, // 30-70 arası yükseklik
-        speedX: -(Math.random() * 0.5 + 0.2), // Yavaş hız
-        opacity: Math.random() * 0.4 + 0.3, // 0.3 - 0.7 arası yarı saydamlık
-        color: `rgba(200, 200, 200, ${Math.random() * 0.4 + 0.3})` // Gri ton, yarı saydam
-    };
-    clouds.push(cloud);
+        y: Math.random() * (canvas.height / 3),
+        width: Math.random() * 100 + 80,
+        height: Math.random() * 40 + 30,
+        speedX: -(Math.random() * 0.5 + 0.2),
+        color: `rgba(200, 200, 200, ${Math.random() * 0.4 + 0.3})`
+    });
 }
 
-// YENİ: Kuş oluşturma fonksiyonu (Basit blok olarak)
 function spawnBird() {
-    const bird = {
+    birds.push({
         x: canvas.width,
-        y: Math.random() * (canvas.height / 2 - 50) + 20, // Üst yarıda, biraz daha yukarıda
+        y: Math.random() * (canvas.height / 2 - 50) + 20,
         width: 20,
         height: 10,
-        speedX: -(Math.random() * 2 + 1), // Bulutlardan daha hızlı
-        color: '#663300' // Kahverengi
-    };
-    birds.push(bird);
+        speedX: -(Math.random() * 2 + 1),
+        color: '#663300'
+    });
+}
+
+function spawnCoin() {
+    const coinSize = 15;
+    coins.push({
+        x: canvas.width,
+        y: Math.random() * (platforms[0].y - 200) + 100, // Ulaşılabilir yükseklikte
+        width: coinSize,
+        height: coinSize,
+        speedX: -baseSpeed * 0.8, // Dikenlerden biraz daha yavaş
+        color: '#f1c40f' // Sarı renk
+    });
 }
 
 
 // --- Düşman Oluşturma Fonksiyonu ---
 function spawnEnemy(type, currentSpeed) {
-    const enemyColor = '#e74c3c';
-
-    // Sağdan Gelen Düşmanlar (Spike)
+    const enemyColor = '#e74c3c'; // Tüm düşmanlar kırmızı
+    
+    // Sağdan Gelen Düşmanlar
     if (type === 'right_spike') {
-        let clusterSize = 1;
-        const rand = Math.random();
-        if (rand < 0.1) clusterSize = 3;
-        else if (rand < 0.3) clusterSize = 2;
-
-        for (let i = 0; i < clusterSize; i++) {
-            const enemy = { type: type, x: 0, y: 0, width: 20, height: 40, color: enemyColor, speedX: -currentSpeed, speedY: 0 };
-            enemy.x = canvas.width + (i * 25);
-
-            if (Math.random() < 0.2) {
-                enemy.width = 40;
-                enemy.height = 60;
-            }
-
-            // YENİ: Y pozisyonunu oyuncunun ulaşabileceği yere göre ayarla
-            const minEnemyY = platforms[0].y - playerMaxReach - 20; // Player'ın en üst noktası + biraz boşluk
-            const maxEnemyY = platforms[0].y - enemy.height; // Zemin seviyesi
-            
-            if (Math.random() < 0.5) { // Yerdeki diken
-                enemy.y = maxEnemyY;
-                enemy.isGroundSpike = true;
-            } else { // Havadaki diken
-                // Oyuncunun ulaşabileceği ve zeminden en az 50px yukarıda
-                enemy.y = Math.random() * (maxEnemyY - enemy.height - 50 - minEnemyY) + minEnemyY;
-                enemy.isGroundSpike = false;
-            }
-            // Çok yukarılarda görünmemesi için ek kontrol
-            enemy.y = Math.max(minEnemyY, enemy.y);
-            enemies.push(enemy);
+        const enemy = { type, x: canvas.width, width: 20, height: 40, color: enemyColor, speedX: -currentSpeed, speedY: 0 };
+        if (Math.random() < 0.5) {
+            enemy.y = platforms[0].y - enemy.height;
+            enemy.isGroundSpike = true;
+        } else {
+            enemy.y = Math.random() * (platforms[0].y - 200) + 100;
+            enemy.isGroundSpike = false;
         }
-    }
-    // Soldan Gelen Düşmanlar (Block)
-    else if (type === 'left_right') {
-        const enemy = { type: type, x: 0, y: 0, width: 40, height: 15, color: enemyColor, speedX: currentSpeed * 0.5, speedY: 0 };
-        enemy.x = -enemy.width;
-        
-        // YENİ: Y pozisyonunu oyuncunun ulaşabileceği yere göre ayarla
-        const minEnemyY = platforms[0].y - playerMaxReach - 20;
-        const maxEnemyY = platforms[0].y - enemy.height - 50; // Zeminden biraz yukarıda
-
-        enemy.y = Math.random() * (maxEnemyY - minEnemyY) + minEnemyY;
-        // Çok yukarılarda görünmemesi için ek kontrol
-        enemy.y = Math.max(minEnemyY, enemy.y);
         enemies.push(enemy);
+    }
+    // Soldan Gelen Düşmanlar
+    else if (type === 'left_right') {
+        enemies.push({ type, x: -40, y: Math.random() * (platforms[0].y - 150) + 50, width: 40, height: 15, color: enemyColor, speedX: currentSpeed * 0.5, speedY: 0 });
+    }
+    // YENİ: Yukarıdan Gelen Düşmanlar
+    else if (type === 'top_down') {
+        enemies.push({ type, x: Math.random() * (canvas.width - 30), y: -30, width: 30, height: 30, color: enemyColor, speedX: 0, speedY: currentSpeed * 0.75 });
     }
 }
 
@@ -214,141 +176,114 @@ function update() {
     player.velocityY += player.gravity;
     player.y += player.velocityY;
 
+    if (player.x < 0) player.x = 0;
+    if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+    
+    // Zeminle temas ve zıplama hakkı yenileme
     platforms.forEach(platform => {
-        if (
-            player.x < platform.x + platform.width &&
-            player.x + player.width > platform.x &&
-            player.y + player.height >= platform.y &&
-            player.y + player.height <= platform.y + platform.height + 1 &&
-            player.velocityY >= 0
-        ) {
+        if (player.x < platform.x + platform.width && player.x + player.width > platform.x && player.y + player.height >= platform.y && player.y + player.height <= platform.y + player.height + 1 && player.velocityY >= 0) {
             player.y = platform.y - player.height;
             player.velocityY = 0;
-            if (player.jumpsLeft < 2) {
-                player.jumpsLeft = 2;
-            }
+            if (player.jumpsLeft < 2) player.jumpsLeft = 2;
             player.isJumping = false;
         }
     });
 
-    if (player.x < 0) player.x = 0;
-    if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
-
+    // Zamanlayıcıları artır
     enemyTimer++;
-    cloudTimer++; // YENİ: Bulut zamanlayıcısını güncelle
-    birdTimer++;  // YENİ: Kuş zamanlayıcısını güncelle
+    cloudTimer++;
+    birdTimer++;
+    coinTimer++;
 
-    // Sağdan Gelenler
-    if (enemyTimer % spikeSpawnRate === 0) {
-        const lastSpike = enemies.slice().reverse().find(e => e.type === 'right_spike');
-        const safeZone = 120;
-        if (!lastSpike || lastSpike.x < canvas.width - safeZone) {
-            spawnEnemy('right_spike', currentSpeed);
-        }
-        spikeSpawnRate = Math.max(40, spikeSpawnRate - Math.floor(elapsedTime / 15));
-    }
+    // --- Nesne Oluşturma ---
+    if (enemyTimer % spikeSpawnRate === 0) spawnEnemy('right_spike', currentSpeed);
+    if (elapsedTime >= 15 && enemyTimer % topDownSpawnRate === 0) spawnEnemy('top_down', currentSpeed); // DEĞİŞTİ: 15. saniyede başlar
+    if (elapsedTime >= 30 && enemyTimer % leftRightSpawnRate === 0) spawnEnemy('left_right', currentSpeed); // DEĞİŞTİ: 30. saniyede başlar
     
-    // Soldan Gelenler (60 saniye sonra aktif)
-    if (elapsedTime >= 60 && enemyTimer % leftRightSpawnRate === 0) {
-        spawnEnemy('left_right', currentSpeed);
-        leftRightSpawnRate = Math.max(150, leftRightSpawnRate - Math.floor((elapsedTime - 60) / 10));
-    }
+    if (cloudTimer % cloudSpawnRate === 0) spawnCloud();
+    if (birdTimer % birdSpawnRate === 0) spawnBird();
+    if (coinTimer % coinSpawnRate === 0) spawnCoin();
 
-    // YENİ: Bulutları ve Kuşları oluştur
-    if (cloudTimer % cloudSpawnRate === 0) {
-        spawnCloud();
-    }
-    if (birdTimer % birdSpawnRate === 0) {
-        spawnBird();
-    }
-
-
-    for (let i = 0; i < enemies.length; i++) {
+    // --- Güncelleme ve Çarpışma Kontrolü ---
+    // Düşmanlar
+    for (let i = enemies.length - 1; i >= 0; i--) {
         let enemy = enemies[i];
         enemy.x += enemy.speedX;
         enemy.y += enemy.speedY;
 
-        if (
-            player.x < enemy.x + enemy.width &&
-            player.x + player.width > enemy.x &&
-            player.y < enemy.y + enemy.height &&
-            player.y + player.height > enemy.y
-        ) {
+        if (player.x < enemy.x + enemy.width && player.x + player.width > enemy.x && player.y < enemy.y + enemy.height && player.y + player.height > enemy.y) {
             gameOver = true;
-            break;
+            return; // Çarpışma anında döngüyü durdur
         }
-
-        let remove = false;
-        if ((enemy.speedX < 0 && enemy.x + enemy.width < 0) || (enemy.speedX > 0 && enemy.x > canvas.width)) {
-            remove = true;
-        }
-        if (remove) {
+        if (enemy.x + enemy.width < 0 || enemy.x > canvas.width || enemy.y > canvas.height) {
             enemies.splice(i, 1);
-            i--;
+        }
+    }
+    
+    // YENİ: Coinler
+    for (let i = coins.length - 1; i >= 0; i--) {
+        let coin = coins[i];
+        coin.x += coin.speedX;
+        
+        if (player.x < coin.x + coin.width && player.x + player.width > coin.x && player.y < coin.y + coin.height && player.y + player.height > coin.y) {
+            score++; // Skoru artır
+            coins.splice(i, 1); // Coini kaldır
+            continue;
+        }
+        if (coin.x + coin.width < 0) {
+            coins.splice(i, 1);
         }
     }
 
-    // YENİ: Bulutları güncelle ve ekran dışına çıkanları temizle
-    for (let i = 0; i < clouds.length; i++) {
-        clouds[i].x += clouds[i].speedX;
-        if (clouds[i].x + clouds[i].width < 0) {
-            clouds.splice(i, 1);
-            i--;
-        }
-    }
-
-    // YENİ: Kuşları güncelle ve ekran dışına çıkanları temizle
-    for (let i = 0; i < birds.length; i++) {
-        birds[i].x += birds[i].speedX;
-        if (birds[i].x + birds[i].width < 0) {
-            birds.splice(i, 1);
-            i--;
-        }
-    }
-}
-
-function drawEnemy(enemy) {
-    ctx.fillStyle = enemy.color;
-    if (enemy.type === 'right_spike' && enemy.isGroundSpike) {
-        ctx.beginPath();
-        ctx.moveTo(enemy.x, enemy.y + enemy.height);
-        ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height);
-        ctx.lineTo(enemy.x + enemy.width / 2, enemy.y);
-        ctx.closePath();
-        ctx.fill();
-    } else {
-        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-    }
+    // Arka Plan Öğeleri
+    [...clouds, ...birds].forEach(item => {
+        item.x += item.speedX;
+    });
+    clouds = clouds.filter(cloud => cloud.x + cloud.width > 0);
+    birds = birds.filter(bird => bird.x + bird.width > 0);
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // YENİ: Önce bulutları çiz (arkada olmalı)
-    clouds.forEach(cloud => {
-        ctx.fillStyle = cloud.color;
-        // Basit dikdörtgen bulutlar
-        ctx.fillRect(cloud.x, cloud.y, cloud.width, cloud.height);
-        // İsterseniz daha karmaşık bulut şekilleri için oval veya birden fazla daire kullanabilirsiniz
+    // En arkadan öne doğru çizim
+    [...clouds, ...birds].forEach(item => {
+        ctx.fillStyle = item.color;
+        ctx.fillRect(item.x, item.y, item.width, item.height);
     });
-
-    // YENİ: Kuşları çiz
-    birds.forEach(bird => {
-        ctx.fillStyle = bird.color;
-        ctx.fillRect(bird.x, bird.y, bird.width, bird.height);
-    });
-
+    
+    // UI (Skor ve Zaman)
     ctx.fillStyle = '#000';
     ctx.font = '24px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Time: ' + elapsedTime + 's', 10, 30);
+    ctx.fillText('Score: ' + score, 10, 60); // YENİ: Skor göstergesi
 
     platforms.forEach(platform => {
         ctx.fillStyle = platform.color;
         ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
     });
 
-    enemies.forEach(drawEnemy);
+    coins.forEach(coin => { // YENİ: Coinleri çiz
+        ctx.fillStyle = coin.color;
+        ctx.beginPath();
+        ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 2, coin.width / 2, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    
+    enemies.forEach(enemy => {
+        ctx.fillStyle = enemy.color;
+        if (enemy.isGroundSpike) {
+             ctx.beginPath();
+             ctx.moveTo(enemy.x, enemy.y + enemy.height);
+             ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height);
+             ctx.lineTo(enemy.x + enemy.width / 2, enemy.y);
+             ctx.closePath();
+             ctx.fill();
+        } else {
+             ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        }
+    });
 
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
@@ -359,10 +294,11 @@ function draw() {
         ctx.fillStyle = 'white';
         ctx.font = '48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('OYUN BİTTİ', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('OYUN BİTTİ', canvas.width / 2, canvas.height / 2 - 40);
         ctx.font = '24px Arial';
-        ctx.fillText('Hayatta Kalma Süresi: ' + elapsedTime + ' saniye', canvas.width / 2, canvas.height / 2 + 30);
-        ctx.fillText('Yeniden başlamak için R tuşuna basın', canvas.width / 2, canvas.height / 2 + 70);
+        ctx.fillText('Süre: ' + elapsedTime + ' saniye', canvas.width / 2, canvas.height / 2 + 10);
+        ctx.fillText('Puan: ' + score, canvas.width / 2, canvas.height / 2 + 40); // YENİ: Son skoru göster
+        ctx.fillText('Yeniden başlamak için R tuşuna basın', canvas.width / 2, canvas.height / 2 + 80);
     }
 }
 
