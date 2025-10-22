@@ -8,7 +8,7 @@ const player = {
     y: 500,
     width: 30,
     height: 30,
-    color: '#2ecc71',
+    // color: '#2ecc71', // Artık görsel kullanıldığı için renk doğrudan kullanılmayacak
     speed: 5,
     velocityY: 0,
     isJumping: false,
@@ -16,8 +16,30 @@ const player = {
     jumpsLeft: 3
 };
 
+// YENİ: Karakter görseli yüklendi
+const playerImage = new Image();
+playerImage.src = 'a.png'; 
+// Görsel yüklendiğinde oyun döngüsünü başlatmak için, 
+// eğer oyun yükleme bitmeden başlarsa karakter görünmeyebilir.
+playerImage.onload = () => {
+    // Görsel yüklendiğinde karakterin boyutunu görselin boyutuna eşitleyebilirsiniz.
+    // Veya player.width ve player.height değerlerini sabit tutabilirsiniz.
+    // player.width = playerImage.width;
+    // player.height = playerImage.height; 
+    console.log("Karakter görseli yüklendi.");
+    // Eğer oyun döngüsü önceden başlamadıysa buradan başlatılabilir:
+    // gameLoop(); 
+};
+// Eğer görsel yüklenirken bir hata olursa
+playerImage.onerror = () => {
+    console.error("Karakter görseli 'a.png' yüklenirken hata oluştu. Dosyanın mevcut olduğundan ve doğru yolda olduğundan emin olun.");
+    // Hata durumunda varsayılan bir renkli kutu çizmeye geri dönebiliriz.
+    // player.color = '#2ecc71'; 
+};
+
+
 const platforms = [
-    { x: 0, y: 550, width: 800, height: 50, color: '#333333' }, // Zemin siyah
+    { x: 0, y: 550, width: 800, height: 50, color: '#333333' },
 ];
 
 let enemies = [];
@@ -139,9 +161,7 @@ function update() {
     if (player.x < 0) player.x = 0;
     if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
     
-    // DÜZELTİLDİ: Karakterin zeminde durmasını sağlayan daha sağlam çarpışma kontrolü
     platforms.forEach(platform => {
-        // Sadece oyuncu düşüyorsa çarpışmayı kontrol et
         if (player.velocityY >= 0) {
             if (
                 player.x < platform.x + platform.width &&
@@ -149,10 +169,8 @@ function update() {
                 player.y + player.height >= platform.y &&
                 player.y + player.height <= platform.y + platform.height
             ) {
-                // Oyuncuyu platformun tam üzerine yerleştir ve düşmesini durdur
                 player.y = platform.y - player.height;
                 player.velocityY = 0;
-                // Zıplama haklarını yenile
                 if (player.jumpsLeft < 3) player.jumpsLeft = 3;
                 player.isJumping = false;
             }
@@ -195,8 +213,7 @@ function update() {
 }
 
 function draw() {
-    // DÜZELTİLDİ: Arka plana gökyüzü rengi eklendi
-    ctx.fillStyle = '#87CEEB'; // Açık mavi (gökyüzü)
+    ctx.fillStyle = '#87CEEB';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     [...clouds, ...birds].forEach(item => {
@@ -236,8 +253,15 @@ function draw() {
         }
     });
 
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.width, player.height);
+    // DÜZELTİLDİ: Karakter artık görselle çiziliyor
+    // Yükleme tamamlandıysa görseli çiz, yoksa varsayılan renkli kutuyu çiz (yedek)
+    if (playerImage.complete && playerImage.naturalWidth !== 0) {
+        ctx.drawImage(playerImage, player.x, player.y, player.width, player.height);
+    } else {
+        ctx.fillStyle = '#2ecc71'; // Varsayılan yeşil renk
+        ctx.fillRect(player.x, player.y, player.width, player.height);
+    }
+    
 
     if (gameOver) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
@@ -261,4 +285,4 @@ function gameLoop() {
     }
 }
 
-gameLoop();
+gameLoop(); // Oyun döngüsünü başlat
