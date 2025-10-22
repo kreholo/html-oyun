@@ -1,5 +1,4 @@
 const canvas = document.getElementById('gameCanvas');
-// Tuval boyutlarını ayarlıyoruz
 canvas.width = 800;
 canvas.height = 600;
 const ctx = canvas.getContext('2d');
@@ -9,35 +8,30 @@ const player = {
     y: 500,
     width: 30,
     height: 30,
-    color: '#2ecc71', // DEĞİŞTİ: Karakter rengi yeşil yapıldı
+    color: '#2ecc71', // DEĞİŞTİ: Karakter rengi yeşil
     speed: 5,
     velocityY: 0,
     isJumping: false, // Yerde olup olmadığını kontrol etmek için hala kullanışlı
-    gravity: 0.6,    // DEĞİŞTİ: Zıplama hissini iyileştirmek için biraz artırıldı
+    gravity: 0.6,    // Zıplama hissini iyileştirmek için biraz artırıldı
     jumpsLeft: 2     // YENİ: Çift zıplama için sayaç
 };
 
-// Ana zemin platformu
 const platforms = [
     { x: 0, y: 550, width: 800, height: 50, color: '#333' },
 ];
 
-// Düşmanları tutacak tek bir dizi
 let enemies = [];
 
-// Zaman ve Skor
 let startTime = performance.now();
 let elapsedTime = 0;
 let gameOver = false;
 
-// Düşman Hız ve Oluşum Ayarları
 let baseSpeed = 4;
 let speedIncreaseRate = 0.05;
 let enemyTimer = 0;
 
-// Düşman oluşum sıklıkları
+// Düşman oluşum sıklıkları (topDownSpawnRate kaldırıldı)
 let spikeSpawnRate = 120;
-let topDownSpawnRate = 180;
 let leftRightSpawnRate = 240;
 
 let rightPressed = false;
@@ -50,9 +44,14 @@ document.addEventListener('keydown', (e) => {
     } else if (e.key === 'Left' || e.key === 'ArrowLeft') {
         leftPressed = true;
     } else if ((e.key === ' ' || e.key === 'ArrowUp') && player.jumpsLeft > 0 && !gameOver) { // DEĞİŞTİ: Çift zıplama kontrolü
-        player.isJumping = true;
-        player.velocityY = -12; // DEĞİŞTİ: Zıplama gücü ayarlandı
-        player.jumpsLeft--;    // YENİ: Zıplama hakkı düşürüldü
+        // YENİ: Her zıplamada başlangıçta aynı yüksekliği veririz, tuş basılı tutulursa artar
+        if (!player.isJumping) { // Eğer yere basıyorsa ilk zıplama
+            player.velocityY = -12;
+        } else { // Havadaysa ve double jump yapıyorsa
+            player.velocityY = -10; // İkinci zıplama biraz daha az güçlü olabilir
+        }
+        player.isJumping = true; // Zıplama durumunu işaretle
+        player.jumpsLeft--;    // Zıplama hakkı düşürüldü
     } else if ((e.key === 'r' || e.key === 'R') && gameOver) {
         resetGame();
     }
@@ -65,7 +64,7 @@ document.addEventListener('keyup', (e) => {
         leftPressed = false;
     }
 
-    // YENİ: Değişken zıplama yüksekliği için
+    // DEĞİŞTİ: Değişken zıplama yüksekliği için
     if (e.key === ' ' || e.key === 'ArrowUp') {
         // Eğer oyuncu hala yükseliyorsa (hızı negatifse), zıplamayı kısa kes
         if (player.velocityY < 0) {
@@ -86,8 +85,7 @@ function resetGame() {
     elapsedTime = 0;
 
     spikeSpawnRate = 120;
-    topDownSpawnRate = 180;
-    leftRightSpawnRate = 240;
+    leftRightSpawnRate = 240; // topDownSpawnRate kaldırıldı
     enemyTimer = 0;
 
     gameOver = false;
@@ -96,21 +94,22 @@ function resetGame() {
 
 // --- Düşman Oluşturma Fonksiyonu ---
 function spawnEnemy(type, currentSpeed) {
+    // DEĞİŞTİ: Tüm düşmanların rengi kırmızı olacak
+    const enemyColor = '#e74c3c';
+
     // Sağdan Gelen Düşmanlar (Spike - Yer veya Havada)
     if (type === 'right_spike') {
-        // YENİ: Kümelenme (Clustering) ve boyutlandırma mantığı buraya taşındı
         let clusterSize = 1;
         const rand = Math.random();
-        if (rand < 0.1) clusterSize = 3;      // %10 ihtimalle 3'lü grup
-        else if (rand < 0.3) clusterSize = 2; // %20 ihtimalle 2'li grup
+        if (rand < 0.1) clusterSize = 3;
+        else if (rand < 0.3) clusterSize = 2;
 
         for (let i = 0; i < clusterSize; i++) {
-            const enemy = { type: type, x: 0, y: 0, width: 20, height: 40, color: '#900', speedX: -currentSpeed, speedY: 0 };
+            const enemy = { type: type, x: 0, y: 0, width: 20, height: 40, color: enemyColor, speedX: -currentSpeed, speedY: 0 };
             
-            // Grupları yan yana getirmek için x pozisyonunu ayarla
-            enemy.x = canvas.width + (i * 25); // Aralarında küçük bir boşluk bırakır
+            enemy.x = canvas.width + (i * 25);
 
-            // YENİ: Rastgele daha büyük dikenler oluştur
+            // Rastgele daha büyük dikenler oluştur
             if (Math.random() < 0.2) {
                 enemy.width = 40;
                 enemy.height = 60;
@@ -129,16 +128,9 @@ function spawnEnemy(type, currentSpeed) {
             enemies.push(enemy);
         }
     }
-    // Yukarıdan Gelen Düşmanlar (30s sonrası)
-    else if (type === 'top_down') {
-        const enemy = { type: type, x: 0, y: 0, width: 30, height: 30, color: 'blue', speedX: 0, speedY: currentSpeed * 0.75 };
-        enemy.x = Math.random() * (canvas.width - enemy.width);
-        enemy.y = -enemy.height;
-        enemies.push(enemy);
-    }
     // Soldan Gelen Düşmanlar (60s sonrası)
     else if (type === 'left_right') {
-        const enemy = { type: type, x: 0, y: 0, width: 40, height: 15, color: 'orange', speedX: currentSpeed * 0.5, speedY: 0 };
+        const enemy = { type: type, x: 0, y: 0, width: 40, height: 15, color: enemyColor, speedX: currentSpeed * 0.5, speedY: 0 }; // DEĞİŞTİ: Renk kırmızı
         enemy.x = -enemy.width;
         const minY = 100;
         const maxY = platforms[0].y - enemy.height - 50;
@@ -150,7 +142,6 @@ function spawnEnemy(type, currentSpeed) {
 function update() {
     if (gameOver) return;
 
-    // --- Skor ve Hız Güncelleme ---
     const now = performance.now();
     const newElapsedTime = Math.floor((now - startTime) / 1000);
     const currentSpeed = baseSpeed + newElapsedTime * speedIncreaseRate;
@@ -159,11 +150,9 @@ function update() {
         elapsedTime = newElapsedTime;
     }
 
-    // --- Oyuncu Hareketi ---
     if (rightPressed) player.x += player.speed;
     if (leftPressed) player.x -= player.speed;
 
-    // --- Yerçekimi ve Zemin Çarpışması ---
     player.velocityY += player.gravity;
     player.y += player.velocityY;
 
@@ -172,60 +161,50 @@ function update() {
             player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
             player.y + player.height >= platform.y &&
-            player.y + player.height <= platform.y + platform.height + 1 && // Ufak bir tolerans
+            player.y + player.height <= platform.y + platform.height + 1 &&
             player.velocityY >= 0
         ) {
             player.y = platform.y - player.height;
             player.velocityY = 0;
-            if (player.isJumping) { // Sadece zıplamadan sonra yere indiğinde sıfırla
-                player.isJumping = false;
-                player.jumpsLeft = 2; // DEĞİŞTİ: Zıplama hakkı burada yenilenir
+            // YENİ: Yere indiğinde zıplama hakkını yenile ve isJumping'i sıfırla
+            if (player.jumpsLeft < 2) {
+                player.jumpsLeft = 2;
             }
+            player.isJumping = false;
         }
     });
 
-    // --- Sınırları kontrol et ---
     if (player.x < 0) player.x = 0;
     if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
 
-    // --- Düşman Oluşturma ve Yönetimi ---
     enemyTimer++;
 
     // 1. Sağdan Gelen Düşmanlar
     if (enemyTimer % spikeSpawnRate === 0) {
-        // YENİ: Kaçınılmaz engelleri önleme
-        // En son oluşturulan 'right_spike' türündeki düşmanı bul
         const lastSpike = enemies.slice().reverse().find(e => e.type === 'right_spike');
-        const safeZone = 120; // Piksellerle güvenli bölge
+        const safeZone = 120; // Oyuncuya tepki süresi tanımak için boşluk
 
-        // Eğer son diken ekrana çok yakın değilse yenisini oluştur
         if (!lastSpike || lastSpike.x < canvas.width - safeZone) {
             spawnEnemy('right_spike', currentSpeed);
         }
-
         spikeSpawnRate = Math.max(40, spikeSpawnRate - Math.floor(elapsedTime / 15));
     }
+    
+    // YENİ: Yukarıdan gelen düşmanlar kaldırıldığı için bu kısım silindi
+    // if (elapsedTime >= 30 && enemyTimer % topDownSpawnRate === 0) { ... }
 
-    // 2. Yukarıdan Gelen Düşmanlar (30 saniye sonra aktif)
-    if (elapsedTime >= 30 && enemyTimer % topDownSpawnRate === 0) {
-        spawnEnemy('top_down', currentSpeed);
-        topDownSpawnRate = Math.max(100, topDownSpawnRate - Math.floor((elapsedTime - 30) / 10));
-    }
-
-    // 3. Soldan Gelen Düşmanlar (60 saniye sonra aktif)
+    // 2. Soldan Gelen Düşmanlar (60 saniye sonra aktif)
     if (elapsedTime >= 60 && enemyTimer % leftRightSpawnRate === 0) {
         spawnEnemy('left_right', currentSpeed);
         leftRightSpawnRate = Math.max(150, leftRightSpawnRate - Math.floor((elapsedTime - 60) / 10));
     }
 
-    // Düşmanları hareket ettir ve çarpışma kontrolü yap
     for (let i = 0; i < enemies.length; i++) {
         let enemy = enemies[i];
 
         enemy.x += enemy.speedX;
         enemy.y += enemy.speedY;
 
-        // --- Çarpışma Kontrolü (AABB) ---
         if (
             player.x < enemy.x + enemy.width &&
             player.x + player.width > enemy.x &&
@@ -236,11 +215,10 @@ function update() {
             break;
         }
 
-        // Ekrandan çıkan düşmanları temizle
         let remove = false;
-        if ((enemy.speedX < 0 && enemy.x + enemy.width < 0) || // Sola giden
-            (enemy.speedX > 0 && enemy.x > canvas.width)    || // Sağa giden
-            (enemy.speedY > 0 && enemy.y > canvas.height)) {   // Aşağı giden
+        if ((enemy.speedX < 0 && enemy.x + enemy.width < 0) ||
+            (enemy.speedX > 0 && enemy.x > canvas.width)    ||
+            (enemy.speedY > 0 && enemy.y > canvas.height)) {
             remove = true;
         }
 
