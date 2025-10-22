@@ -8,15 +8,14 @@ const player = {
     y: 500,
     width: 30,
     height: 30,
-    color: '#2ecc71', // Karakter Yeşil
+    color: '#2ecc71',
     speed: 5,
     velocityY: 0,
     isJumping: false,
     gravity: 0.6,
-    jumpsLeft: 2
+    jumpsLeft: 3 // DEĞİŞTİ: Zıplama hakkı 3 yapıldı (Triple Jump)
 };
 
-// DEĞİŞTİ: Zemin rengi kırmızı yapıldı
 const platforms = [
     { x: 0, y: 550, width: 800, height: 50, color: '#c0392b' },
 ];
@@ -31,13 +30,11 @@ let startTime = performance.now();
 let elapsedTime = 0;
 let gameOver = false;
 
-// DEĞİŞTİ: Oyun hızı ve zorluğu artırıldı
 let baseSpeed = 4.5;
 let speedIncreaseRate = 0.07;
 let enemyTimer = 0;
 
-// DEĞİŞTİ: Dikenlerin gelme sıklığı artırıldı
-let spikeSpawnRate = 90; // Değer düşürüldü, daha sık gelecek
+let spikeSpawnRate = 90;
 let topDownSpawnRate = 150;
 let leftRightSpawnRate = 240;
 
@@ -51,13 +48,11 @@ let coinSpawnRate = 200;
 let rightPressed = false;
 let leftPressed = false;
 
-// YENİ: Oyuncunun maksimum zıplama yüksekliğini hesaplayan yardımcı fonksiyon
 function getPlayerMaxReach() {
-    // Bu değer, engellerin oyuncunun ulaşamayacağı kadar yukarıda oluşmasını engeller
-    // Yerden ne kadar yükseğe zıplayabileceğini yaklaşık olarak hesaplar
-    const jump1Height = (12 * 12) / (2 * player.gravity); // ilk zıplama
-    const jump2Height = (10 * 10) / (2 * player.gravity); // ikinci zıplama
-    return platforms[0].y - (jump1Height + jump2Height); // Canvas'ın tepesinden olan uzaklık
+    const jump1Height = (12 * 12) / (2 * player.gravity);
+    const jump2Height = (10 * 10) / (2 * player.gravity);
+    const jump3Height = (10 * 10) / (2 * player.gravity); // 3. zıplama da 2. ile aynı güçte
+    return platforms[0].y - (jump1Height + jump2Height + jump3Height);
 }
 const playerMaxJumpY = getPlayerMaxReach();
 
@@ -88,7 +83,7 @@ function resetGame() {
     player.y = 500;
     player.velocityY = 0;
     player.isJumping = false;
-    player.jumpsLeft = 2;
+    player.jumpsLeft = 3; // DEĞİŞTİ: Zıplama hakkı 3'e sıfırlanır
     
     enemies = [];
     clouds = [];
@@ -112,7 +107,7 @@ function spawnCloud() {
         width: Math.random() * 100 + 80,
         height: Math.random() * 40 + 30,
         speedX: -(Math.random() * 0.5 + 0.2),
-        color: `rgba(255, 255, 255, ${Math.random() * 0.4 + 0.5})` // Daha beyaz bulutlar
+        color: `rgba(255, 255, 255, ${Math.random() * 0.4 + 0.5})`
     });
 }
 
@@ -123,14 +118,14 @@ function spawnBird() {
         width: 20,
         height: 10,
         speedX: -(Math.random() * 2 + 1),
-        color: '#5C4033' // Koyu kahve
+        color: '#5C4033'
     });
 }
 
 function spawnCoin() {
     coins.push({
         x: canvas.width,
-        y: Math.random() * (platforms[0].y - 250) + 150, // Ulaşılabilir yükseklikte
+        y: Math.random() * (platforms[0].y - 250) + 150,
         width: 15,
         height: 15,
         speedX: -baseSpeed * 0.8,
@@ -139,17 +134,19 @@ function spawnCoin() {
 }
 
 function spawnEnemy(type, currentSpeed) {
-    const enemyColor = '#e74c3c'; // Tüm engeller kırmızı
-    
+    const enemyColor = '#e74c3c';
+    const cloudZoneHeight = canvas.height / 3; // DEĞİŞTİ: Bulutların olduğu bölge (üst 1/3)
+
     // Sağdan Gelen Düşmanlar
     if (type === 'right_spike') {
         const enemy = { type, x: canvas.width, width: 20, height: 40, color: enemyColor, speedX: -currentSpeed, speedY: 0 };
-        if (Math.random() < 0.4) { // %40 ihtimalle yer dikeni
+        if (Math.random() < 0.4) {
             enemy.y = platforms[0].y - enemy.height;
             enemy.isGroundSpike = true;
-        } else { // %60 ihtimalle hava dikeni
-            // DEĞİŞTİ: Yüksekliği oyuncunun zıplama menziliyle sınırla
-            enemy.y = Math.random() * (platforms[0].y - enemy.height - playerMaxJumpY) + playerMaxJumpY;
+        } else {
+            // DEĞİŞTİ: Bulut bölgesinin altından başlamasını sağla
+            const minY = Math.max(playerMaxJumpY, cloudZoneHeight);
+            enemy.y = Math.random() * (platforms[0].y - enemy.height - minY) + minY;
             enemy.isGroundSpike = false;
         }
         enemies.push(enemy);
@@ -157,8 +154,9 @@ function spawnEnemy(type, currentSpeed) {
     // Soldan Gelen Düşmanlar
     else if (type === 'left_right') {
         const enemy = { type, x: -40, width: 40, height: 15, color: enemyColor, speedX: currentSpeed * 0.6, speedY: 0 };
-        // DEĞİŞTİ: Yüksekliği oyuncunun zıplama menziliyle sınırla
-        enemy.y = Math.random() * (platforms[0].y - enemy.height - 50 - playerMaxJumpY) + playerMaxJumpY;
+        // DEĞİŞTİ: Bulut bölgesinin altından başlamasını sağla
+        const minY = Math.max(playerMaxJumpY, cloudZoneHeight);
+        enemy.y = Math.random() * (platforms[0].y - enemy.height - 50 - minY) + minY;
         enemies.push(enemy);
     }
     // Yukarıdan Gelen Düşmanlar
@@ -191,7 +189,8 @@ function update() {
         if (player.x < platform.x + platform.width && player.x + player.width > platform.x && player.y + player.height >= platform.y && player.y + player.height <= platform.y + 1 && player.velocityY >= 0) {
             player.y = platform.y - player.height;
             player.velocityY = 0;
-            if (player.jumpsLeft < 2) player.jumpsLeft = 2;
+            // DEĞİŞTİ: Zıplama hakkı 3'e yenilenir
+            if (player.jumpsLeft < 3) player.jumpsLeft = 3;
             player.isJumping = false;
         }
     });
@@ -253,7 +252,7 @@ function draw() {
         ctx.fillRect(item.x, item.y, item.width, item.height);
     });
     
-    ctx.fillStyle = '#fff'; // Skor ve zaman yazısı beyaz
+    ctx.fillStyle = '#fff';
     ctx.font = '24px Arial';
     ctx.textAlign = 'left';
     ctx.fillText('Time: ' + elapsedTime + 's', 10, 30);
