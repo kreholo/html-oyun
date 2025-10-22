@@ -13,7 +13,7 @@ const player = {
     velocityY: 0,
     isJumping: false,
     gravity: 0.6,
-    jumpsLeft: 3 // DEĞİŞTİ: Zıplama hakkı 3 yapıldı (Triple Jump)
+    jumpsLeft: 3 // Triple Jump
 };
 
 const platforms = [
@@ -51,7 +51,7 @@ let leftPressed = false;
 function getPlayerMaxReach() {
     const jump1Height = (12 * 12) / (2 * player.gravity);
     const jump2Height = (10 * 10) / (2 * player.gravity);
-    const jump3Height = (10 * 10) / (2 * player.gravity); // 3. zıplama da 2. ile aynı güçte
+    const jump3Height = (10 * 10) / (2 * player.gravity);
     return platforms[0].y - (jump1Height + jump2Height + jump3Height);
 }
 const playerMaxJumpY = getPlayerMaxReach();
@@ -83,7 +83,7 @@ function resetGame() {
     player.y = 500;
     player.velocityY = 0;
     player.isJumping = false;
-    player.jumpsLeft = 3; // DEĞİŞTİ: Zıplama hakkı 3'e sıfırlanır
+    player.jumpsLeft = 3; // Zıplama hakkı 3'e sıfırlanır
     
     enemies = [];
     clouds = [];
@@ -135,7 +135,7 @@ function spawnCoin() {
 
 function spawnEnemy(type, currentSpeed) {
     const enemyColor = '#e74c3c';
-    const cloudZoneHeight = canvas.height / 3; // DEĞİŞTİ: Bulutların olduğu bölge (üst 1/3)
+    const cloudZoneHeight = canvas.height / 3;
 
     // Sağdan Gelen Düşmanlar
     if (type === 'right_spike') {
@@ -144,7 +144,6 @@ function spawnEnemy(type, currentSpeed) {
             enemy.y = platforms[0].y - enemy.height;
             enemy.isGroundSpike = true;
         } else {
-            // DEĞİŞTİ: Bulut bölgesinin altından başlamasını sağla
             const minY = Math.max(playerMaxJumpY, cloudZoneHeight);
             enemy.y = Math.random() * (platforms[0].y - enemy.height - minY) + minY;
             enemy.isGroundSpike = false;
@@ -154,7 +153,6 @@ function spawnEnemy(type, currentSpeed) {
     // Soldan Gelen Düşmanlar
     else if (type === 'left_right') {
         const enemy = { type, x: -40, width: 40, height: 15, color: enemyColor, speedX: currentSpeed * 0.6, speedY: 0 };
-        // DEĞİŞTİ: Bulut bölgesinin altından başlamasını sağla
         const minY = Math.max(playerMaxJumpY, cloudZoneHeight);
         enemy.y = Math.random() * (platforms[0].y - enemy.height - 50 - minY) + minY;
         enemies.push(enemy);
@@ -189,8 +187,8 @@ function update() {
         if (player.x < platform.x + platform.width && player.x + player.width > platform.x && player.y + player.height >= platform.y && player.y + player.height <= platform.y + 1 && player.velocityY >= 0) {
             player.y = platform.y - player.height;
             player.velocityY = 0;
-            // DEĞİŞTİ: Zıplama hakkı 3'e yenilenir
-            if (player.jumpsLeft < 4) player.jumpsLeft = 4;
+            // DÜZELTİLDİ: Zıplama hakkı doğru şekilde 3'e yenilenir
+            if (player.jumpsLeft < 3) player.jumpsLeft = 3;
             player.isJumping = false;
         }
     });
@@ -266,7 +264,8 @@ function draw() {
     coins.forEach(coin => {
         ctx.fillStyle = coin.color;
         ctx.beginPath();
-        ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 4, coin.width / 2, 0, Math.PI * 2);
+        // DÜZELTİLDİ: Coin'in dikey pozisyonu ortalandı
+        ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 2, coin.width / 2, 0, Math.PI * 2);
         ctx.fill();
     });
     
