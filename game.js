@@ -8,7 +8,7 @@ const player = {
     y: 500,
     width: 30,
     height: 30,
-    color: '#2ecc71',
+    color: '#2ecc71', // Karakter yeşil
     speed: 5,
     velocityY: 0,
     isJumping: false,
@@ -17,7 +17,7 @@ const player = {
 };
 
 const platforms = [
-    { x: 0, y: 550, width: 800, height: 50, color: '#c0392b' },
+    { x: 0, y: 550, width: 800, height: 50, color: '#333333' }, // DÜZELTİLDİ: Zemin rengi siyah yapıldı
 ];
 
 let enemies = [];
@@ -83,7 +83,7 @@ function resetGame() {
     player.y = 500;
     player.velocityY = 0;
     player.isJumping = false;
-    player.jumpsLeft = 3; // Zıplama hakkı 3'e sıfırlanır
+    player.jumpsLeft = 3;
     
     enemies = [];
     clouds = [];
@@ -183,15 +183,25 @@ function update() {
     if (player.x < 0) player.x = 0;
     if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
     
+    // DÜZELTİLDİ: Platform çarpışma mantığı daha güvenilir hale getirildi
     platforms.forEach(platform => {
-        if (player.x < platform.x + platform.width && player.x + player.width > platform.x && player.y + player.height >= platform.y && player.y + player.height <= platform.y + 1 && player.velocityY >= 0) {
+        // Çarpışma algılandı mı?
+        if (
+            player.x < platform.x + platform.width &&
+            player.x + player.width > platform.x &&
+            player.y + player.height > platform.y && // Oyuncu platform seviyesinin üstünde/içinde mi?
+            player.y < platform.y + platform.height && // Oyuncu platformun altından geçmiyor mu?
+            player.velocityY >= 0 // Oyuncu aşağı doğru hareket ediyor mu?
+        ) {
+            // Oyuncuyu platformun tam üzerine oturt
             player.y = platform.y - player.height;
-            player.velocityY = 0;
-            // DÜZELTİLDİ: Zıplama hakkı doğru şekilde 3'e yenilenir
+            player.velocityY = 0; // Düşmeyi durdur
+            // Zıplama haklarını yenile
             if (player.jumpsLeft < 3) player.jumpsLeft = 3;
             player.isJumping = false;
         }
     });
+
 
     enemyTimer++;
     cloudTimer++;
@@ -264,7 +274,6 @@ function draw() {
     coins.forEach(coin => {
         ctx.fillStyle = coin.color;
         ctx.beginPath();
-        // DÜZELTİLDİ: Coin'in dikey pozisyonu ortalandı
         ctx.arc(coin.x + coin.width / 2, coin.y + coin.height / 2, coin.width / 2, 0, Math.PI * 2);
         ctx.fill();
     });
