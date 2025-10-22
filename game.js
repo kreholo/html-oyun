@@ -1,11 +1,11 @@
 const canvas = document.getElementById('gameCanvas');
-// Assuming canvas is set up with a width and height, e.g., 800x600
+// Tuval boyutlarını ayarlıyoruz
 canvas.width = 800;
 canvas.height = 600;
 const ctx = canvas.getContext('2d');
 
 const player = {
-    x: 100, // Move player to the left
+    x: 100,
     y: 500,
     width: 30,
     height: 30,
@@ -16,23 +16,33 @@ const player = {
     gravity: 0.5,
 };
 
-// Only keep the main ground platform
+// Ana zemin platformu
 const platforms = [
-    { x: 0, y: 550, width: 800, height: 50, color: '#333' }, // Darker ground
+    { x: 0, y: 550, width: 800, height: 50, color: '#333' }, 
 ];
 
-// New array to hold the incoming spikes (enemies)
-let spikes = [];
-// Enemy spawn control
-let spikeSpawnRate = 120; // Lower number means faster spawn (every 120 frames)
-let spikeTimer = 0;
-const spikeSpeed = 4;
-let score = 0;
+// Düşmanları tutacak tek bir dizi
+let enemies = [];
+
+// Zaman ve Skor
+let startTime = performance.now();
+let elapsedTime = 0;
 let gameOver = false;
+
+// Düşman Hız ve Oluşum Ayarları
+let baseSpeed = 4;
+let speedIncreaseRate = 0.05; // Hız her saniye 0.05 artacak
+let enemyTimer = 0;
+
+// Düşman oluşum sıklıkları (Düşük değer daha sık oluşum demektir)
+let spikeSpawnRate = 120; // Sağdan gelen düşmanlar
+let topDownSpawnRate = 180; // Yukarıdan gelenler (30s sonra aktif)
+let leftRightSpawnRate = 240; // Soldan gelenler (60s sonra aktif)
 
 let rightPressed = false;
 let leftPressed = false;
 
+// --- Olay Dinleyicileri ---
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Right' || e.key === 'ArrowRight') {
         rightPressed = true;
@@ -40,9 +50,8 @@ document.addEventListener('keydown', (e) => {
         leftPressed = true;
     } else if ((e.key === ' ' || e.key === 'ArrowUp') && !player.isJumping && !gameOver) {
         player.isJumping = true;
-        player.velocityY = -10; // Jump strength
-    } else if (e.key === 'r' && gameOver) {
-        // Restart game on 'R' key press
+        player.velocityY = -10; 
+    } else if ((e.key === 'r' || e.key === 'R') && gameOver) {
         resetGame();
     }
 });
@@ -55,173 +64,231 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-// Function to reset the game state
+// --- Oyun Sıfırlama ---
 function resetGame() {
     player.x = 100;
     player.y = 500;
     player.velocityY = 0;
     player.isJumping = false;
-    spikes = [];
-    score = 0;
-    spikeTimer = 0;
+    enemies = [];
+    startTime = performance.now(); // Zamanlayıcıyı sıfırla
+    elapsedTime = 0;
+    
+    // Spawn oranlarını başlangıç değerlerine getir
+    spikeSpawnRate = 120;
+    topDownSpawnRate = 180;
+    leftRightSpawnRate = 240;
+    enemyTimer = 0;
+    
     gameOver = false;
-    gameLoop(); // Restart the loop
+    gameLoop();
 }
 
-// Function to generate a new spike
-function spawnSpike() {
-    const spikeHeight = 40;
-    const spikeWidth = 20;
-    // Spikes will appear from the right edge, on the ground platform
-    const x = canvas.width;
-    const y = platforms[0].y - spikeHeight; // Adjust to sit on the ground
+// --- Düşman Oluşturma Fonksiyonu ---
+function spawnEnemy(type, currentSpeed) {
+    const enemy = { type: type, x: 0, y: 0, width: 20, height: 20, color: '#000', speedX: 0, speedY: 0 };
     
-    // Choose a random color for variety
-    const colors = ['#000', '#555', '#900'];
-    const color = colors[Math.floor(Math.random() * colors.length)];
+    // Sağdan Gelen Düşmanlar (Spike - Yer veya Havada)
+    if (type === 'right_spike') {
+        enemy.x = canvas.width;
+        enemy.width = 20;
+        enemy.height = 40;
+        enemy.color = '#900'; // Kırmızımsı spike rengi
+        enemy.speedX = -currentSpeed;
+        
+        // %50 Yere sabit, %50 havada yüzen düşman
+        if (Math.random() < 0.5) {
+            enemy.y = platforms[0].y - enemy.height; // Yerde
+            enemy.isGroundSpike = true; // Çizim için işaretle
+        } else {
+            // Havada yüzen düşman (Y ekseninde rastgele)
+            const minY = 50;
+            const maxY = platforms[0].y - enemy.height - 50;
+            enemy.y = Math.random() * (maxY - minY) + minY;
+            enemy.isGroundSpike = false;
+        }
+    } 
+    
+    // Yukarıdan Gelen Düşmanlar (30s sonrası)
+    else if (type === 'top_down') {
+        enemy.x = Math.random() * (canvas.width - enemy.width);
+        enemy.y = -enemy.height; // Canvas dışından başla
+        enemy.width = 30;
+        enemy.height = 30;
+        enemy.color = 'blue';
+        enemy.speedY = currentSpeed * 0.75; 
+    }
 
-    spikes.push({
-        x: x,
-        y: y,
-        width: spikeWidth,
-        height: spikeHeight,
-        color: color,
-        speed: spikeSpeed,
-    });
+    // Soldan Gelen Düşmanlar (60s sonrası)
+    else if (type === 'left_right') {
+        enemy.x = -enemy.width; // Canvas dışından başla
+        // Zeminden biraz yukarıda rastgele y pozisyonu
+        const minY = 100;
+        const maxY = platforms[0].y - enemy.height - 50;
+        enemy.y = Math.random() * (maxY - minY) + minY;
+        enemy.width = 40;
+        enemy.height = 15;
+        enemy.color = 'orange';
+        enemy.speedX = currentSpeed * 0.5; 
+    }
+    
+    enemies.push(enemy);
 }
 
 function update() {
     if (gameOver) return;
 
-    // --- Player Movement ---
-    if (rightPressed) {
-        player.x += player.speed;
-    }
-    if (leftPressed) {
-        player.x -= player.speed;
-    }
-
-    // --- Gravity and Vertical Movement ---
-    // Apply gravity if player is jumping or not on a platform
-    let onPlatform = false;
-    platforms.forEach(platform => {
-        if (
-            player.x < platform.x + platform.width &&
-            player.x + player.width > platform.x &&
-            player.y + player.height === platform.y
-        ) {
-            onPlatform = true;
-        }
-    });
-
-    if (!onPlatform || player.isJumping) {
-        player.velocityY += player.gravity;
-        player.y += player.velocityY;
-    } else if (onPlatform) {
-        // If on a platform, stop vertical movement and jumping state
-        player.velocityY = 0;
-        player.isJumping = false;
+    // --- Skor ve Hız Güncelleme ---
+    const now = performance.now();
+    const newElapsedTime = Math.floor((now - startTime) / 1000);
+    
+    // Her saniye hız artsın
+    const currentSpeed = baseSpeed + newElapsedTime * speedIncreaseRate;
+    
+    // Sadece skor değiştiyse güncelle
+    if (newElapsedTime !== elapsedTime) {
+        elapsedTime = newElapsedTime;
     }
     
-    // Check collision with platforms (for landing)
+    // --- Oyuncu Hareketi ---
+    if (rightPressed) player.x += player.speed;
+    if (leftPressed) player.x -= player.speed;
+
+    // --- Yerçekimi ve Zemin Çarpışması ---
+    player.velocityY += player.gravity;
+    player.y += player.velocityY;
+
     platforms.forEach(platform => {
         if (
             player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
             player.y + player.height >= platform.y &&
             player.y + player.height <= platform.y + platform.height &&
-            player.velocityY >= 0 // Only check when falling
+            player.velocityY >= 0 
         ) {
-            player.y = platform.y - player.height; // Snap to the top of the platform
+            player.y = platform.y - player.height;
             player.velocityY = 0;
             player.isJumping = false;
         }
     });
 
-    // --- Boundary Check ---
+    // --- Sınırları kontrol et ---
     if (player.x < 0) player.x = 0;
     if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
-
-    // --- Spike Management ---
-    // Increase timer and spawn a spike when the timer reaches the rate
-    spikeTimer++;
-    if (spikeTimer >= spikeSpawnRate) {
-        spawnSpike();
-        spikeTimer = 0;
-        // Optionally, make the game harder by decreasing the spawn rate (making it faster)
-        // spikeSpawnRate = Math.max(60, spikeSpawnRate - 1); 
+    
+    // --- Düşman Oluşturma ve Yönetimi ---
+    enemyTimer++;
+    
+    // 1. Sağdan Gelen Düşmanlar (Her zaman aktif)
+    if (enemyTimer % spikeSpawnRate === 0) {
+        // Kümelenme (Clustering) Mantığı:
+        let clusterSize = 1;
+        const rand = Math.random();
+        if (rand < 0.1) clusterSize = 3; // %10 ihtimalle 3 tane
+        else if (rand < 0.3) clusterSize = 2; // %20 ihtimalle 2 tane
+        
+        for (let i = 0; i < clusterSize; i++) {
+            spawnEnemy('right_spike', currentSpeed);
+        }
+        
+        // Spawn oranını zorluğa göre ayarla (Minimum 40 frame)
+        spikeSpawnRate = Math.max(40, spikeSpawnRate - Math.floor(elapsedTime / 15)); 
+    }
+    
+    // 2. Yukarıdan Gelen Düşmanlar (30 saniye sonra aktif)
+    if (elapsedTime >= 30) {
+        if (enemyTimer % topDownSpawnRate === 0) {
+            spawnEnemy('top_down', currentSpeed);
+            topDownSpawnRate = Math.max(100, topDownSpawnRate - Math.floor((elapsedTime - 30) / 10));
+        }
+    }
+    
+    // 3. Soldan Gelen Düşmanlar (60 saniye sonra aktif)
+    if (elapsedTime >= 60) {
+        if (enemyTimer % leftRightSpawnRate === 0) {
+            spawnEnemy('left_right', currentSpeed);
+            leftRightSpawnRate = Math.max(150, leftRightSpawnRate - Math.floor((elapsedTime - 60) / 10));
+        }
     }
 
-    // Move spikes and check for collision
-    for (let i = 0; i < spikes.length; i++) {
-        let spike = spikes[i];
-        spike.x -= spike.speed;
+    // Düşmanları hareket ettir ve çarpışma kontrolü yap
+    for (let i = 0; i < enemies.length; i++) {
+        let enemy = enemies[i];
+        
+        enemy.x += enemy.speedX;
+        enemy.y += enemy.speedY;
 
-        // Collision Check: Player hits a spike
+        // --- Çarpışma Kontrolü (AABB) ---
         if (
-            player.x < spike.x + spike.width &&
-            player.x + player.width > spike.x &&
-            player.y < spike.y + spike.height &&
-            player.y + player.height > spike.y
+            player.x < enemy.x + enemy.width &&
+            player.x + player.width > enemy.x &&
+            player.y < enemy.y + enemy.height &&
+            player.y + player.height > enemy.y
         ) {
-            // GAME OVER!
             gameOver = true;
             break; 
         }
 
-        // Remove spikes that have moved off the left edge and increase score
-        if (spike.x + spike.width < 0) {
-            spikes.splice(i, 1);
-            score++;
-            i--; // Decrement index because we removed an element
+        // Ekrandan çıkan düşmanları temizle
+        let remove = false;
+        if (enemy.type === 'right_spike' && enemy.x + enemy.width < 0) {
+            remove = true; 
+        } else if (enemy.type === 'top_down' && enemy.y > canvas.height) {
+            remove = true; 
+        } else if (enemy.type === 'left_right' && enemy.x > canvas.width) {
+            remove = true; 
         }
-    }
-
-    // Optionally increase difficulty and score rate over time
-    if (score % 20 === 0 && score > 0) {
-        spikeSpawnRate = Math.max(40, spikeSpawnRate - 1); // Make it spawn faster, minimum 40
-        // spikeSpeed += 0.1; // Make spikes move faster
+        
+        if (remove) {
+            enemies.splice(i, 1);
+            i--; 
+        }
     }
 }
 
-function drawSpike(spike) {
-    // A simple triangle to represent a spike
-    ctx.fillStyle = spike.color;
-    ctx.beginPath();
-    // Base of the triangle (on the ground)
-    ctx.moveTo(spike.x, spike.y + spike.height); 
-    ctx.lineTo(spike.x + spike.width, spike.y + spike.height);
-    // Tip of the triangle
-    ctx.lineTo(spike.x + spike.width / 2, spike.y); 
-    ctx.closePath();
-    ctx.fill();
+// --- Çizim Fonksiyonları ---
+function drawEnemy(enemy) {
+    if (enemy.type === 'right_spike' && enemy.isGroundSpike) {
+        // Yerdeki dikenleri üçgen olarak çiz (eski estetik)
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        // Tabanı yerde, ucu yukarıda
+        ctx.moveTo(enemy.x, enemy.y + enemy.height); 
+        ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height);
+        ctx.lineTo(enemy.x + enemy.width / 2, enemy.y); 
+        ctx.closePath();
+        ctx.fill();
+    } else {
+        // Diğer tüm düşmanları (havadaki diken, yukarıdan ve soldan gelenler) blok olarak çiz
+        ctx.fillStyle = enemy.color;
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+    }
 }
 
 
 function draw() {
-    // Clear the canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw Score
+    // Skoru (Zamanı) Çiz
     ctx.fillStyle = '#000';
     ctx.font = '24px Arial';
     ctx.textAlign = 'left';
-    ctx.fillText('Score: ' + score, 10, 30);
+    ctx.fillText('Time: ' + elapsedTime + 's', 10, 30);
 
-    // Draw Platforms (Ground)
+    // Platformları (Zemini) Çiz
     platforms.forEach(platform => {
         ctx.fillStyle = platform.color;
         ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
     });
     
-    // Draw Spikes
-    spikes.forEach(drawSpike);
+    // Düşmanları Çiz
+    enemies.forEach(drawEnemy);
 
-    // Draw Player
+    // Oyuncuyu Çiz
     ctx.fillStyle = player.color;
     ctx.fillRect(player.x, player.y, player.width, player.height);
     
-    // Draw Game Over Screen
+    // Game Over Ekranı
     if (gameOver) {
         ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -229,21 +296,20 @@ function draw() {
         ctx.fillStyle = 'white';
         ctx.font = '48px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+        ctx.fillText('OYUN BİTTİ', canvas.width / 2, canvas.height / 2 - 20);
         
         ctx.font = '24px Arial';
-        ctx.fillText('Final Score: ' + score, canvas.width / 2, canvas.height / 2 + 30);
-        ctx.fillText('Press R to Restart', canvas.width / 2, canvas.height / 2 + 70);
+        ctx.fillText('Hayatta Kalma Süresi: ' + elapsedTime + ' saniye', canvas.width / 2, canvas.height / 2 + 30);
+        ctx.fillText('Yeniden başlamak için R tuşuna basın', canvas.width / 2, canvas.height / 2 + 70);
     }
 }
 
 function gameLoop() {
     update();
     draw();
-    // Only continue the loop if the game is not over
     if (!gameOver) {
         requestAnimationFrame(gameLoop);
     }
 }
 
-gameLoop(); // Start the game
+gameLoop(); // Oyunu Başlat
